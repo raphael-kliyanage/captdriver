@@ -57,10 +57,19 @@ static void decode_status(const uint8_t *s, size_t size)
 	if (size <= 2)
 		return;
 
+	/* BufLevel low byte is at payload byte 5 (0-indexed: s[4]), byte 6 = s[5].
+	 * Parse it whenever we have at least 6 payload bytes (total size > 8). */
+	if (size > 8)
+		status.buf_level = s[4];  /* CAPT_BSTAT_BUF_LO / CAPT_XSTAT_BUF_LO */
+
 	status.status[1] = WORD(s[8], s[9]);
 
 	if (size <= 10)
 		return;
+
+	status.aux            = s[CAPT_XSTAT_AUX];    /* byte 9:  Aux auxiliary engine status */
+	status.xstat_cnt      = s[CAPT_XSTAT_CNT];    /* byte 10: Cnt engine flags */
+	status.xstat_pap      = s[CAPT_XSTAT_PAP];    /* byte 11: Pap paper availability */
 
 	status.status[2] = WORD(s[10], s[11]);
 	status.status[3] = WORD(s[12], s[13]);
@@ -100,39 +109,47 @@ const struct capt_status_s *capt_get_status(void)
 const struct capt_status_s *capt_get_xstatus_only(void)
 {
 	download_status(CAPT_GET_EXTENDED_STATUS);
+#ifdef DEBUG
 	print_status();
-	/*
+#endif
 	if (FLAG(&status, CAPT_FL_NEED_INPUT_STATUS)) {
-	   capt_sendrecv(CAPT_GET_INPUT_STATUS, NULL, 0, NULL, 0);
-	   print_status();
+		capt_sendrecv(CAPT_GET_INPUT_STATUS, NULL, 0, NULL, 0);
 	}
-	*/
 
 	return &status;
 }
 
 const struct capt_status_s *capt_get_xstatus(void)
 {
+	/* Fix 8: GetBasicStatus first, then check byte-2 flags (protocol §2.4):
+	 *   CAPT_FL2_XSTATUS_CHANGED (0x01) → call GetExtendedStatus
+	 *   CAPT_FL2_NEED_INPUT_STATUS (0x02) → call GetInputStatus */
 	download_status(CAPT_GET_BASIC_STATUS);
 	if (FLAG(&status, CAPT_FL_XSTATUS_CHANGED))
 		capt_get_xstatus_only();
+	if (FLAG(&status, CAPT_FL_NEED_INPUT_STATUS))
+		capt_sendrecv(CAPT_GET_INPUT_STATUS, NULL, 0, NULL, 0);
 	return &status;
 }
 
 void capt_wait_ready(void)
 {
+	/* Fix 7: Poll GetBasicStatus; wait until CMD_BUSY (0x04) clears.
+	 * CAPT_FL_CMD_BUSY = _FL(0,2) = 0x04 = CMD_BUSY per protocol §2.4.
+	 * Before Phase 1 this was CAPT_FL_BUSY which mapped to ERROR_BIT (0x80)
+	 * and was therefore waiting for errors to clear, not command completion. */
 	while (FLAG(capt_get_status(), CAPT_FL_CMD_BUSY))
-		sleep(1);
+		usleep(100000);
 }
 
 void capt_wait_xready(void)
 {
 	while (FLAG(capt_get_xstatus(), CAPT_FL_CMD_BUSY))
-		sleep(1);
+		usleep(100000);
 }
 
 void capt_wait_xready_only(void)
 {
        while (FLAG(capt_get_xstatus_only(), CAPT_FL_CMD_BUSY))
-               sleep(1);
+               usleep(100000);
 }
