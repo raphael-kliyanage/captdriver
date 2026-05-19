@@ -57,10 +57,17 @@ static void decode_status(const uint8_t *s, size_t size)
 	if (size <= 2)
 		return;
 
+	if (size > 8)
+		status.buf_level = s[4];  /* CAPT_BSTAT_BUF_LO / CAPT_XSTAT_BUF_LO */
+
 	status.status[1] = WORD(s[8], s[9]);
 
 	if (size <= 10)
 		return;
+
+	status.aux            = s[CAPT_XSTAT_AUX];    /* Aux auxiliary engine status */
+	status.xstat_cnt      = s[CAPT_XSTAT_CNT];    /* Cnt engine flags */
+	status.xstat_pap      = s[CAPT_XSTAT_PAP];    /* paper availability */
 
 	status.status[2] = WORD(s[10], s[11]);
 	status.status[3] = WORD(s[12], s[13]);
@@ -100,13 +107,12 @@ const struct capt_status_s *capt_get_status(void)
 const struct capt_status_s *capt_get_xstatus_only(void)
 {
 	download_status(CAPT_GET_EXTENDED_STATUS);
+#ifdef DEBUG
 	print_status();
-	/*
+#endif
 	if (FLAG(&status, CAPT_FL_NEED_INPUT_STATUS)) {
-	   capt_sendrecv(CAPT_GET_INPUT_STATUS, NULL, 0, NULL, 0);
-	   print_status();
+		capt_sendrecv(CAPT_GET_INPUT_STATUS, NULL, 0, NULL, 0);
 	}
-	*/
 
 	return &status;
 }
@@ -116,23 +122,25 @@ const struct capt_status_s *capt_get_xstatus(void)
 	download_status(CAPT_GET_BASIC_STATUS);
 	if (FLAG(&status, CAPT_FL_XSTATUS_CHANGED))
 		capt_get_xstatus_only();
+	if (FLAG(&status, CAPT_FL_NEED_INPUT_STATUS))
+		capt_sendrecv(CAPT_GET_INPUT_STATUS, NULL, 0, NULL, 0);
 	return &status;
 }
 
 void capt_wait_ready(void)
 {
 	while (FLAG(capt_get_status(), CAPT_FL_CMD_BUSY))
-		sleep(1);
+		usleep(100000);
 }
 
 void capt_wait_xready(void)
 {
 	while (FLAG(capt_get_xstatus(), CAPT_FL_CMD_BUSY))
-		sleep(1);
+		usleep(100000);
 }
 
 void capt_wait_xready_only(void)
 {
        while (FLAG(capt_get_xstatus_only(), CAPT_FL_CMD_BUSY))
-               sleep(1);
+               usleep(100000);
 }
