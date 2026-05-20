@@ -584,9 +584,9 @@ static bool lbp2900_page_epilogue(struct printer_state_s *state, const struct pa
 		if ((FLAG(status, CAPT_FL_NOTREADY) || FLAG(status, CAPT_FL_OFFLINE))
 		    && !FLAG(status, CAPT_FL_PRINTING)
 		    && !FLAG(status, CAPT_FL_PROCESSING1)) {
-			/* Confirm with GetExtendedStatus */
-			capt_get_xstatus_only();
-			status = lbp2900_get_status(state->ops);
+			/* Confirm with GetExtendedStatus — this populates xstat_cnt and xstat_pap */
+			status = capt_get_xstatus_only();
+			/* Do NOT call lbp2900_get_status() here — it would overwrite xstat fields */
 			if ((status->xstat_cnt & CAPT_CNT_PRINT_REJECTED)
 			    && status->xstat_pap == 0x00) {
 				fprintf(stderr, "DEBUG: CAPT: out-of-paper confirmed (Cnt=0x%02x, Pap=0x%02x)\n",
