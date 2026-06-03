@@ -520,17 +520,7 @@ static void lbp3000_oop_recovery(struct printer_state_s *state)
 	capt_get_xstatus_only();
 	lbp2900_get_status(state->ops);
 
-	uint8_t led_nopaper[12] = {
-		CAPT_INTSTAT_NO_PAPER,  /* byte index 0: int_status */
-		0x00,                   /* byte index 1 */
-		CAPT_HSCODE_NO_PAPER,   /* byte index 2: hs_code */
-		state->paper_sz,        /* byte index 3: paper_size_id */
-		0x01,                   /* byte index 4 */
-		0x00, 0x00, 0x00,       /* byte index 5-7 */
-		/* bytes 9-12 = CAPT_HOSTERR_NO_PAPER = 0x00010000 in LE */
-		0x00, 0x00, 0x01, 0x00, /* byte index 8-11 */
-	};
-	capt_sendrecv(CAPT_SET_LED_STATUS, led_nopaper, sizeof(led_nopaper), NULL, 0);
+	capt_sendrecv(CAPT_SET_LED_STATUS, state->ops->gpio_blink, state->ops->gpio_blink_size, NULL, 0);
 
 	lbp2900_get_status(state->ops);
 	capt_get_xstatus_only();
@@ -548,8 +538,11 @@ static void lbp3000_oop_recovery(struct printer_state_s *state)
 	}
 
 	capt_sendrecv(CAPT_GET_INPUT_STATUS, NULL, 0, NULL, 0);
-	uint8_t led_clear[12] = { 0 };
-	capt_sendrecv(CAPT_SET_LED_STATUS, led_clear, sizeof(led_clear), NULL, 0);
+
+	/* SetLEDStatus(0) — clear NoPaper LED (all 12 payload bytes = 0x00) */
+	capt_sendrecv(CAPT_SET_LED_STATUS, state->ops->gpio_init, state->ops->gpio_init_size, NULL, 0);
+
+	/* ClearMisPrint */
 	capt_sendrecv(CAPT_CLEAR_MIS_PRINT, NULL, 0, NULL, 0);
 	capt_sendrecv(CAPT_CLEAR_ERROR, NULL, 0, NULL, 0);
 	capt_sendrecv(CAPT_DISCARD_DATA, NULL, 0, NULL, 0);
@@ -646,7 +639,6 @@ static bool lbp2900_page_epilogue(struct printer_state_s *state, const struct pa
 static void lbp2900_job_epilogue(struct printer_state_s *state)
 {
 	uint8_t jbuf[2] = { LO(job), HI(job) };
-	unsigned total_pages = state->ipage;
 
 	capt_get_xstatus_only();
 	send_job_start(CAPT_JOBFLAG_END);
@@ -762,10 +754,10 @@ static struct lbp2900_ops_s lbp2900_ops = {
 		.send_band = ops_send_band_hiscoa,
 		.cancel_cleanup = lbp2900_cancel_cleanup,
 		.wait_user = lbp2900_wait_user,
-	},
-	.gpio = {
-		.init = lbp2900_gpio_init,
-		.blink = lbp2900_gpio_blink,
+		.gpio_init = lbp2900_gpio_init,
+		.gpio_init_size = ARRAY_SIZE(lbp2900_gpio_init),
+		.gpio_blink = lbp2900_gpio_blink,
+		.gpio_blink_size = ARRAY_SIZE(lbp2900_gpio_blink)
 	},
 	.get_status = capt_get_xstatus,
 	.wait_ready = capt_wait_ready,
@@ -783,10 +775,10 @@ static struct lbp2900_ops_s lbp3000_ops = {
 		.send_band = ops_send_band_hiscoa,
 		.cancel_cleanup = lbp2900_cancel_cleanup,
 		.wait_user = lbp2900_wait_user,
-	},
-	.gpio = {
-		.init = lbp2900_gpio_init,
-		.blink = lbp2900_gpio_blink,
+		.gpio_init = lbp2900_gpio_init,
+		.gpio_init_size = ARRAY_SIZE(lbp2900_gpio_init),
+		.gpio_blink = lbp2900_gpio_blink,
+		.gpio_blink_size = ARRAY_SIZE(lbp2900_gpio_blink)
 	},
 	.get_status = capt_get_xstatus,
 	.wait_ready = capt_wait_ready,
@@ -804,10 +796,10 @@ static struct lbp2900_ops_s lbp3010_ops = {
 		.send_band = ops_send_band_hiscoa,
 		.cancel_cleanup = lbp3010_cancel_cleanup,
 		.wait_user = lbp3010_wait_user,
-	},
-	.gpio = {
-		.init = lbp3010_gpio_init,
-		.blink = lbp3010_gpio_blink,
+		.gpio_init = lbp3010_gpio_init,
+		.gpio_init_size = ARRAY_SIZE(lbp3010_gpio_init),
+		.gpio_blink = lbp3010_gpio_blink,
+		.gpio_blink_size = ARRAY_SIZE(lbp3010_gpio_blink)
 	},
 	.get_status = capt_get_xstatus_only,
 	.wait_ready = capt_wait_xready_only,
@@ -824,10 +816,10 @@ static struct lbp2900_ops_s lbp6000_ops = {
 		.send_band = ops_send_band_hiscoa,
 		.cancel_cleanup = lbp3010_cancel_cleanup,
 		.wait_user = lbp3010_wait_user,
-	},
-	.gpio = {
-		.init = lbp3010_gpio_init,
-		.blink = lbp3010_gpio_blink,
+		.gpio_init = lbp3010_gpio_init,
+		.gpio_init_size = ARRAY_SIZE(lbp3010_gpio_init),
+		.gpio_blink = lbp3010_gpio_blink,
+		.gpio_blink_size = ARRAY_SIZE(lbp3010_gpio_blink)
 	},
 	.get_status = capt_get_xstatus_only,
 	.wait_ready = capt_wait_xready_only,
