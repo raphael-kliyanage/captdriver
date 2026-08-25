@@ -173,7 +173,8 @@ static void compress_page_data(struct printer_state_s *state,
 			}
 			memcpy(bandbuf + iline * dims->line_size + shiftb, linebuf + shiftl, csize);
 		}
-		size = state->ops->compress_band(state, compbuf, compsize, bandbuf, dims->line_size, nlines);
+		size = state->ops->compress_band(state, compbuf, compsize, bandbuf, dims->line_size, nlines,
+			iband * dims->band_size + nlines >= dims->num_lines);
 		new_band = calloc(1, sizeof_struct_band_list_s(size));
 		if (! new_band)
 			abort();
@@ -197,12 +198,53 @@ static void compress_page_data(struct printer_state_s *state,
 static void send_page_data(struct printer_state_s *state, const struct cached_page_s *page)
 {
 	const struct band_list_s *band;
+	size_t chunk_max;
+	size_t group_size;
+	uint8_t *groupbuf;
+	uint8_t *p;
 
 	state->isend = 0;
 	state->iband = 0;
 
-	for (band = page->bands; band; band = band->next, ++state->iband)
-		state->ops->send_band(state, band->data, band->size);
+	/* Determine chunk size limit (same logic as in ops_send_band_hiscoa).
+	 * Cap at 0xFF00 (65280) for safety with the USB framing layer. */
+	chunk_max = state->printer_blk ? (size_t)state->printer_blk : 65520;
+	if (chunk_max > 0xFF00)
+		chunk_max = 0xFF00;
+
+	/* Allocate buffer for grouping bands. */
+	groupbuf = malloc(chunk_max);
+	if (!groupbuf)
+		abort();
+
+	/* Send bands in groups that fit within chunk_max, ensuring we never
+	 * split a single band across multiple USB transfers. This maintains
+	 * band alignment while optimizing transfer efficiency. */
+	p = groupbuf;
+	group_size = 0;
+
+	for (band = page->bands; band; band = band->next, ++state->iband) {
+		if (band->size == 0)
+			continue;
+
+		/* If adding this band would exceed chunk_max, send the current group first. */
+		if (group_size > 0 && group_size + band->size > chunk_max) {
+			state->ops->send_band(state, groupbuf, group_size);
+			p = groupbuf;
+			group_size = 0;
+		}
+
+		/* Add this band to the current group. */
+		memcpy(p, band->data, band->size);
+		p += band->size;
+		group_size += band->size;
+	}
+
+	/* Send any remaining bands in the final group. */
+	if (group_size > 0)
+		state->ops->send_band(state, groupbuf, group_size);
+
+	free(groupbuf);
 }
 
 static void do_cancel(int s)
@@ -349,7 +391,7 @@ int main(int argc, char *argv[])
 	sigemptyset(&act_ign.sa_mask);
 	sigaction(SIGPIPE, &act_ign, NULL);
 	/* handle SIGTERM */
-	act_cancel.sa_handler = do_cancel();
+	act_cancel.sa_handler = do_cancel;
 	sigemptyset(&act_cancel.sa_mask);
 	sigaddset(&act_cancel.sa_mask, SIGINT);
 	sigaction(SIGTERM, &act_cancel, NULL);

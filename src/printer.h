@@ -36,6 +36,13 @@ struct printer_state_s {
 	unsigned ipage;
 	unsigned iband;
 	unsigned isend;
+	bool sent_job_cont;        /* SetJobInfo2(flag=2) has been sent once */
+	uint16_t printer_blk;      /* max IC_VIDEO_DATA chunk size from GetPrinterInfo */
+	uint16_t printer_buf;      /* buffer count from GetPrinterInfo */
+	bool startprint_sent;      /* StartPrint was already sent in streaming mode */
+	uint8_t paper_sz;          /* paper size byte (for SetLEDStatus NoPaper payload) */
+	int pages_printed_before_error; /* pages successfully printed before out-of-paper */
+	unsigned printer_page_offset; /* ipage bias after OOP recovery (printer counters reset to 0) */
 };
 
 struct printer_ops_s {
@@ -49,10 +56,15 @@ struct printer_ops_s {
 	bool (*page_epilogue) (struct printer_state_s *state, const struct page_dims_s *dims);
 	size_t (*compress_band) (struct printer_state_s *state,
 		void *band, size_t size,
-		const void *pixels, unsigned line_size, unsigned num_lines);
+		const void *pixels, unsigned line_size, unsigned num_lines, unsigned last_band_page_end);
 	void (*send_band) (struct printer_state_s *state, const void *band, size_t size);
 	void (*cancel_cleanup) (struct printer_state_s *state);
 	void (*wait_user) (struct printer_state_s *state);
+	/* GPIO LED control data (pointer to byte arrays) */
+	const uint8_t *gpio_init;
+	const uint8_t gpio_init_size;
+	const uint8_t *gpio_blink;
+	const uint8_t gpio_blink_size;
 };
 
 const struct printer_ops_s *printer_detect(void);
