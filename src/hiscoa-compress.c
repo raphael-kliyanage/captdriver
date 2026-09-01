@@ -210,7 +210,7 @@ size_t hiscoa_compress_band(void *buf, size_t size,
 		.xorval = 0x43,
 
 		.input_buf = (const uint8_t *) band,
-		.input_size = line_size * nlines,
+		.input_size = (size_t)line_size * nlines,
 		.input_pos = 0,
 
 		.output_buf = (uint8_t *) buf,

@@ -65,7 +65,7 @@ static size_t center_pixels(size_t small, size_t large, unsigned bpp)
 	bypp = bpp / 8;
 	small_p = small / bypp;
 	large_p = large / bypp;
-	return bypp * ((large_p - small_p) / 2);
+	return (size_t)bypp * ((large_p - small_p) / 2);
 }
 
 static void free_cached_page(struct cached_page_s *cached_page)
@@ -158,7 +158,7 @@ static void compress_page_data(struct printer_state_s *state,
 		unsigned nlines = dims->band_size;
 		unsigned iline;
 		size_t size;
-		memset(bandbuf, 0, dims->line_size * dims->band_size);
+		memset(bandbuf, 0, (size_t)dims->line_size * dims->band_size);
 		if (nlines + start >= dims->num_lines)
 			nlines = dims->num_lines - start;
 		for (iline = 0; iline < nlines; ++iline) {
